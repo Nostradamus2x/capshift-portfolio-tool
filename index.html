@@ -163,15 +163,16 @@
 </div>
 
 <script>
-const API_KEY  = "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";
-const SHEET_ID = "1f0rzZnsmfcNt7nVx84ymApQdnPwZSnIOfuTVj-zfqbs";
-const SHEET_TAB = "portfolio";
+const WORKER_URL = "https://capshift-portfolio-proxy.nostradamus2x.workers.dev";
+const SHEET_ID   = "1f0rzZnsmfcNt7nVx84ymApQdnPwZSnIOfuTVj-zfqbs";
+const SHEET_TAB  = "portfolio";
+const SHEET_GID  = "0"; // find this in your sheet URL after #gid=
 // ───────────────────────────────────────────────────────────────
 
 let COMPANIES = [], selectedCompany = null;
 
 async function loadSheetData() {
-  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_TAB)}`;
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/pub?gid=${SHEET_GID}&single=true&output=csv`;
   let text;
   try {
     const res = await fetch(url);
@@ -189,7 +190,7 @@ async function loadSheetData() {
   const headers = rows[0].map(h => h.trim().toLowerCase());
   COMPANIES = rows.slice(1).filter(r => r.some(c => c.trim())).map(row => {
     const o = {}; headers.forEach((h,i) => { o[h] = (row[i]||"").trim(); });
-    return { name: o.name, type: o.type, capital: o.capital, structure: o.structure, financial: parseInt(o.financial)||0, operational: parseInt(o.operational)||0, impact: parseInt(o.impact)||0, status: o.status||"green", notes: o.notes||"" };
+    return { name: o.name, sector: o.sector||"", fund_type: o.fund_type||"", capital: o.capital, structure: o.structure, financial: parseInt(o.financial_score)||0, operational: parseInt(o.operational_score)||0, impact: parseInt(o.impact_score)||0, composite: parseInt(o.composite_score)||0, status: o.status||"green", sdg: o.sdg_primary||"", geography: o.geography||"", vintage: o.vintage_year||"", stage: o.stage||"", investee_type: o.investee_type||"", notes: o.notes||"" };
   });
   document.getElementById("last-updated").textContent = "Live data from Google Sheets · Last loaded " + new Date().toLocaleTimeString();
   return true;
@@ -229,7 +230,7 @@ function badgeHTML(s) {
 }
 function companyCardHTML(c, i, listId) {
   return `<div class="company-card" id="${listId}-${i}" onclick="selectCompany(${i},'${listId}')">
-    <div class="cc-top"><div><div class="cc-name">${c.name}</div><div class="cc-meta">${c.type} &nbsp;·&nbsp; ${c.structure} &nbsp;·&nbsp; ${c.capital}</div></div>${badgeHTML(c.status)}</div>
+    <div class="cc-top"><div><div class="cc-name">${c.name}</div><div class="cc-meta">${c.sector} &nbsp;·&nbsp; ${c.structure} &nbsp;·&nbsp; ${c.capital} &nbsp;·&nbsp; ${c.geography}</div></div>${badgeHTML(c.status)}</div>
     <div class="pillars">${pillarHTML("Financial",c.financial)}${pillarHTML("Operational",c.operational)}${pillarHTML("Impact",c.impact)}</div>
   </div>`;
 }
@@ -272,13 +273,13 @@ function computeFlags(rv, rw, it, leadership, headcount) {
   return flags;
 }
 async function callClaude(prompt, max_tokens=1000) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch(`${WORKER_URL}/api/generate`, {
     method: "POST",
-    headers: { "Content-Type":"application/json","x-api-key":API_KEY,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true" },
-    body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens, messages:[{role:"user",content:prompt}] })
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: prompt }], max_tokens })
   });
   const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
+  if (data.error) throw new Error(data.error);
   return data.content.map(b=>b.text||"").join("");
 }
 async function runAnalysis() {
@@ -293,9 +294,10 @@ async function runAnalysis() {
   btn.disabled=true; btn.innerHTML='<div class="dots"><span></span><span></span><span></span></div>';
   const flags=computeFlags(rv,rw,it,leadership,headcount);
   document.getElementById("risk-flags-list").innerHTML=flags.map(f=>`<div class="risk-flag ${f.level}"><span class="risk-icon">${f.icon}</span><span>${f.text}</span></div>`).join("");
-  const prompt=`You are a portfolio analyst at CapShift, a mission-driven impact investing firm. Write a concise internal quarterly monitoring summary for ${c.name}, a ${c.type} funded via a ${c.structure} of ${c.capital}.
+  const prompt=`You are a portfolio analyst at CapShift, a mission-driven impact investing firm. Write a concise internal quarterly monitoring summary for ${c.name}, a ${c.fund_type} in the ${c.sector} sector, funded via a ${c.structure} of ${c.capital}.
 
-Current pillar scores: Financial ${c.financial}/10, Operational ${c.operational}/10, Impact ${c.impact}/10.
+Geography: ${c.geography} · Stage: ${c.stage} · Investee type: ${c.investee_type} · SDGs: ${c.sdg||"not specified"} · Vintage: ${c.vintage}
+Current pillar scores: Financial ${c.financial}/10, Operational ${c.operational}/10, Impact ${c.impact}/10 (Composite: ${c.composite}/30).
 Existing notes: ${c.notes||"none"}
 
 This quarter's data:
@@ -319,7 +321,7 @@ async function runReport() {
   const context=document.getElementById("r-context").value||"No specific context provided.";
   const btn=document.getElementById("report-btn");
   btn.disabled=true; btn.innerHTML='<div class="dots"><span></span><span></span><span></span></div>';
-  const summary=COMPANIES.map(c=>`${c.name} (${c.type}, ${c.structure}, ${c.capital}): Financial ${c.financial}/10, Operational ${c.operational}/10, Impact ${c.impact}/10, Status: ${c.status}. Notes: ${c.notes||"none"}`).join("\n");
+  const summary=COMPANIES.map(c=>`${c.name} (${c.sector}, ${c.fund_type}, ${c.structure}, ${c.capital}, ${c.geography}, SDGs: ${c.sdg||"n/a"}): Financial ${c.financial}/10, Operational ${c.operational}/10, Impact ${c.impact}/10, Composite ${c.composite}/30, Status: ${c.status}. Notes: ${c.notes||"none"}`).join("\n");
   const prompt=`You are a senior analyst at CapShift writing a ${quarter} quarterly portfolio report for a ${audience} client.
 
 Portfolio (live from database):
