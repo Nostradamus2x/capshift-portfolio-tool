@@ -1,19 +1,19 @@
 /**
  * CapShift Portfolio Intelligence — Cloudflare Worker
  *
- * Proxies requests from the GitHub Pages frontend to the Google Gemini API.
- * Your API key lives here as an environment variable (GEMINI_API_KEY)
+ * Proxies requests from the GitHub Pages frontend to the Groq API.
+ * Your API key lives here as an environment variable (GROQ_API_KEY)
  * and is never exposed to the browser.
  *
  * Deploy:  wrangler deploy
- * Set key: wrangler secret put GEMINI_API_KEY
+ * Set key: wrangler secret put GROQ_API_KEY
  */
 
 const ALLOWED_ORIGIN = "*"; // Lock to your GitHub Pages URL after testing
                              // e.g. "https://nostradamus2x.github.io"
 
-const GEMINI_MODEL   = "gemini-2.0-flash";
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const GROQ_MODEL   = "llama-3.3-70b-versatile";
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 export default {
   async fetch(request, env) {
@@ -49,39 +49,36 @@ export default {
       return errorResponse("messages array is required", 400);
     }
 
-    // Convert messages to Gemini format
-    // Gemini uses "model" instead of "assistant" for role
-    const contents = messages.map(m => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }],
-    }));
-
-    // Call Gemini API
-    let geminiResponse;
+    // Call Groq API (OpenAI-compatible format)
+    let groqResponse;
     try {
-      geminiResponse = await fetch(`${GEMINI_API_URL}?key=${env.GEMINI_API_KEY}`, {
+      groqResponse = await fetch(GROQ_API_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${env.GROQ_API_KEY}`,
+        },
         body: JSON.stringify({
-          contents,
-          generationConfig: { maxOutputTokens: max_tokens },
+          model: GROQ_MODEL,
+          messages,
+          max_tokens,
         }),
       });
     } catch (err) {
-      return errorResponse("Failed to reach Gemini API: " + err.message, 502);
+      return errorResponse("Failed to reach Groq API: " + err.message, 502);
     }
 
-    const data = await geminiResponse.json();
+    const data = await groqResponse.json();
 
-    if (!geminiResponse.ok) {
-      return new Response(JSON.stringify({ error: data?.error?.message || "Gemini API error" }), {
-        status: geminiResponse.status,
+    if (!groqResponse.ok) {
+      return new Response(JSON.stringify({ error: data?.error?.message || "Groq API error" }), {
+        status: groqResponse.status,
         headers: { "Content-Type": "application/json", ...corsHeaders(ALLOWED_ORIGIN) },
       });
     }
 
     // Normalize response to match Anthropic format so the frontend needs no changes
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const text = data.choices?.[0]?.message?.content || "";
     return new Response(JSON.stringify({ content: [{ text }] }), {
       status: 200,
       headers: { "Content-Type": "application/json", ...corsHeaders(ALLOWED_ORIGIN) },
