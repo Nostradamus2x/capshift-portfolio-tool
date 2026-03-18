@@ -12,7 +12,7 @@
 const ALLOWED_ORIGIN = "*"; // Lock to your GitHub Pages URL after testing
                              // e.g. "https://nostradamus2x.github.io"
 
-const GEMINI_MODEL   = "gemini-1.5-flash";
+const GEMINI_MODEL   = "gemini-2.0-flash";
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 export default {
