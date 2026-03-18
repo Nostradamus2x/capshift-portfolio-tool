@@ -163,16 +163,14 @@
 </div>
 
 <script>
-const WORKER_URL = "https://capshift-portfolio-proxy.nostradamus2x.workers.dev";
-const SHEET_ID   = "1hHJiMZCmcvseCy2fGErn__nUhiztETT5l6K8s6c8TcM";
-const SHEET_TAB  = "portfolio";
-const SHEET_GID  = "0"; // find this in your sheet URL after #gid=
+const WORKER_URL   = "https://capshift-portfolio-proxy.nostradamus2x.workers.dev";
+const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTLgrSCh2YwmyZQu6AbZ-_dPBKVGTmfgGFbLZ1KNJJuz3JZMbSsCcBxxpIGQ1IcBbuDg96HdfTNWCga/pub?gid=0&single=true&output=csv";
 // ───────────────────────────────────────────────────────────────
 
 let COMPANIES = [], selectedCompany = null;
 
 async function loadSheetData() {
-  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/pub?gid=${SHEET_GID}&single=true&output=csv`;
+  const url = SHEET_CSV_URL;
   let text;
   try {
     const res = await fetch(url);
